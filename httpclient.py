@@ -34,19 +34,53 @@ class HTTPResponse(object):
 
 class HTTPClient(object):
     #def get_host_port(self,url):
+    def get_url_info(self, url):
+        url_info = urllib.parse.urlparse(url)
+        url_info_list = ["", "", ""]
+
+        # host
+        url_info_list[0] = url_info.hostname
+
+        # port
+        url_info_list[1] = url_info.port
+
+        if url_info_list[1] == None:
+            if url_info.scheme == "https":
+                url_info_list[1] = 443
+            else:  # http
+                url_info_list[1] = 80
+           
+        # path
+        url_info_list[2] = url_info.path
+
+        if url_info_list[2] == "":
+            url_info_list[2] = "/"
+
+        return url_info_list
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((host, port))
-        return None
+        return self.socket
 
     def get_code(self, data):
+        split_data = data.split(" ")
+        if len(split_data) >= 2:
+            status_code = int(split_data[1])
+            return status_code
         return None
 
     def get_headers(self,data):
-        return None
+        split_data = data.split("\r\n")
+        header = split_data[0]
+        hearder_list = header.split("\n")
+        return hearder_list
 
     def get_body(self, data):
+        split_data = data.split("\r\n\r\n")
+        if len(split_data) >= 2:
+            body = split_data[1]
+            return body
         return None
     
     def sendall(self, data):
@@ -70,11 +104,75 @@ class HTTPClient(object):
     def GET(self, url, args=None):
         code = 500
         body = ""
+
+        # get host, port, path
+        returned_url_info = self.get_url_info(url)
+        host = returned_url_info[0]
+        port = returned_url_info[1]
+        path = returned_url_info[2]
+
+        # connect
+        sock = self.connect(host, port)
+
+        request = "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+        self.sendall(request)
+
+        # receive
+        response = self.recvall(sock)
+
+        code = self.get_code(response)
+        headers = self.get_headers(response)
+        body = self.get_body(response)
+
+        # close
+        self.close()
+
+        # print the info to stdout
+        print(code)
+        print("--------")
+        print(headers)
+        print("--------")
+        print(body)
+
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
         code = 500
         body = ""
+
+        # get host, port, path
+        returned_url_info = self.get_url_info(url)
+        host = returned_url_info[0]
+        port = returned_url_info[1]
+        path = returned_url_info[2]
+
+        # connect
+        sock = self.connect(host, port)
+
+        if args == None:  # no query string
+            request = "POST " + path + " HTTP/1.1\r\nHost: " + host + "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: " + str(0) + "\r\n\r\n"
+        else:             # have query string
+            request = "POST " + path + " HTTP/1.1\r\nHost: " + host + "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: " + str(len(urllib.parse.urlencode(args))) + "\r\n\r\n" + urllib.parse.urlencode(args)
+        
+        self.sendall(request)
+
+        # receive
+        response = self.recvall(sock)
+
+        code = self.get_code(response)
+        headers = self.get_headers(response)
+        body = self.get_body(response)
+
+        # close
+        self.close()
+
+        # print the info to stdout
+        print(code)
+        print("--------")
+        print(headers)
+        print("--------")
+        print(body)
+
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
